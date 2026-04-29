@@ -1,4 +1,5 @@
 import { HTMLAttributes, forwardRef } from 'react'
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { LucideIcon } from 'lucide-react'
 
@@ -8,7 +9,7 @@ export interface EmptyStateProps extends HTMLAttributes<HTMLDivElement> {
   description?: string
   action?: {
     label: string
-    onClick: () => void
+    href: string
   }
 }
 
@@ -30,12 +31,12 @@ const EmptyState = forwardRef<HTMLDivElement, EmptyStateProps>(
           <p className="text-sm text-[#888888] mb-6 max-w-md">{description}</p>
         )}
         {action && (
-          <button
-            onClick={action.onClick}
+          <Link
+            href={action.href}
             className="px-4 py-2 bg-[#0070F3] text-white rounded-lg text-sm font-medium hover:bg-[#0056b3] transition-colors"
           >
             {action.label}
-          </button>
+          </Link>
         )}
       </div>
     )

@@ -26,7 +26,7 @@ export default function DashboardPage() {
               description="Create your first application to get started with CoreHubFocus"
               action={{
                 label: 'Create Application',
-                onClick: () => {}
+                href: '/apps/new'
               }}
             />
           </Card>
