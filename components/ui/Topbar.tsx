@@ -2,23 +2,24 @@
 
 import { HTMLAttributes, forwardRef } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { AppLogo } from './AppLogo'
-import { Bell, Search, User, LogOut } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
+import { Bell, Search, Plus, LogOut } from 'lucide-react'
+import { Button } from './Button'
 
 export interface TopbarProps extends HTMLAttributes<HTMLDivElement> {
   title?: string
   showSearch?: boolean
+  showNewAppButton?: boolean
 }
 
 const Topbar = forwardRef<HTMLDivElement, TopbarProps>(
-  ({ className, title, showSearch = true, ...props }, ref) => {
+  ({ className, title, showSearch = true, showNewAppButton = false, ...props }, ref) => {
     const router = useRouter()
 
     const handleLogout = async () => {
-      const supabase = createClient()
-      await supabase.auth.signOut()
+      await fetch('/auth/logout', { method: 'POST' })
       router.push('/login')
       router.refresh()
     }
@@ -55,6 +56,15 @@ const Topbar = forwardRef<HTMLDivElement, TopbarProps>(
             </div>
           )}
 
+          {showNewAppButton && (
+            <Link href="/apps/new">
+              <Button variant="primary" size="sm">
+                <Plus size={16} className="mr-2" />
+                Nouvelle App
+              </Button>
+            </Link>
+          )}
+
           <button className="relative p-2 text-[#888888] hover:text-white transition-colors">
             <Bell size={18} strokeWidth={1.5} />
             <span className="absolute top-1 right-1 w-2 h-2 bg-[#FF0000] rounded-full" />
@@ -63,7 +73,7 @@ const Topbar = forwardRef<HTMLDivElement, TopbarProps>(
           <button 
             onClick={handleLogout}
             className="flex items-center gap-2 p-2 text-[#888888] hover:text-white transition-colors"
-            title="Logout"
+            title="Sign out"
           >
             <LogOut size={18} strokeWidth={1.5} />
           </button>

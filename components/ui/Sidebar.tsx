@@ -7,6 +7,8 @@ import { AppLogo } from './AppLogo'
 import { 
   LayoutDashboard, 
   Smartphone, 
+  FileText, 
+  Hammer, 
   Settings, 
   LogOut,
   type LucideIcon 
@@ -28,6 +30,8 @@ export interface SidebarProps extends HTMLAttributes<HTMLDivElement> {
 const defaultItems: SidebarItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/dashboard' },
   { label: 'Applications', icon: Smartphone, href: '/apps' },
+  { label: 'Documentation', icon: FileText, href: '/documentation' },
+  { label: 'Builds', icon: Hammer, href: '/builds' },
   { label: 'Settings', icon: Settings, href: '/settings' },
 ]
 

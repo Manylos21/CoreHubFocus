@@ -5,6 +5,7 @@ export interface KPIWidgetProps extends HTMLAttributes<HTMLDivElement> {
   label: string
   value: string | number
   unit?: string
+  description?: string
   trend?: {
     value: number
     isPositive: boolean
@@ -12,7 +13,7 @@ export interface KPIWidgetProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 const KPIWidget = forwardRef<HTMLDivElement, KPIWidgetProps>(
-  ({ className, label, value, unit, trend, ...props }, ref) => {
+  ({ className, label, value, unit, description, trend, ...props }, ref) => {
     return (
       <div
         ref={ref}
@@ -24,6 +25,9 @@ const KPIWidget = forwardRef<HTMLDivElement, KPIWidgetProps>(
           <span className="text-3xl font-bold text-white font-mono">{value}</span>
           {unit && <span className="text-sm text-[#888888]">{unit}</span>}
         </div>
+        {description && (
+          <p className="text-xs text-[#666666] mt-1">{description}</p>
+        )}
         {trend && (
           <div className="mt-2 flex items-center gap-1">
             <span

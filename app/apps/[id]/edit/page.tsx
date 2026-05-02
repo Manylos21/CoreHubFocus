@@ -8,8 +8,11 @@ import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Textarea } from '@/components/ui/Textarea'
 import { Button } from '@/components/ui/Button'
-import { getAppById, updateApp } from '@/lib/supabase/apps-client'
-import type { MobileApp, OS, AppStatus, DeploymentStatus } from '@/types/app'
+
+// Placeholder types - TODO: Re-enable when edit page is migrated to new schema
+type OS = 'ios' | 'android' | 'cross_platform'
+type AppStatus = 'active' | 'archived'
+type DeploymentStatus = 'green' | 'orange' | 'red'
 
 export default function EditAppPage() {
   const router = useRouter()
@@ -40,72 +43,67 @@ export default function EditAppPage() {
       setLoading(true)
       setError('')
       try {
-        const app = await getAppById(appId)
+        // TODO: Re-enable when edit page is migrated to new schema
+        // const app = await getAppById(appId)
         
-        if (!app) {
-          setError('Application not found')
-          return
-        }
+        // if (!app) {
+        //   setError('Application not found')
+        //   return
+        // }
         
-        setFormData({
-          name: app.name,
-          version: app.version,
-          icon_url: app.icon_url || '',
-          short_description: app.short_description || '',
-          os: app.os,
-          status: app.status,
-          deployment_status: app.deployment_status,
-          tech_stack: app.tech_stack?.join(', ') || '',
-          repository_url: app.repository_url || '',
-          testflight_url: app.testflight_url || '',
-          play_console_url: app.play_console_url || '',
-          api_status_url: app.api_status_url || '',
-        })
+        // setFormData({
+        //   name: app.name,
+        //   version: app.version,
+        //   icon_url: app.icon_url || '',
+        //   short_description: app.short_description || '',
+        //   os: app.os,
+        //   status: app.status,
+        //   deployment_status: app.deployment_status,
+        //   tech_stack: app.tech_stack?.join(', ') || '',
+        //   repository_url: app.repository_url || '',
+        //   testflight_url: app.testflight_url || '',
+        //   play_console_url: app.play_console_url || '',
+        //   api_status_url: app.api_status_url || '',
+        // })
+        
+        // Placeholder - remove when Supabase is connected
+        setError('Edit page not yet connected to Supabase. Please use the New App page to create applications.')
       } catch (err) {
         setError('Failed to load application')
       } finally {
         setLoading(false)
       }
     }
-    
+
     fetchApp()
   }, [appId])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
     setSaving(true)
-
-    if (!formData.name || !formData.version || !formData.os) {
-      setError('Name, version, and OS are required')
-      setSaving(false)
-      return
-    }
+    setError('')
 
     try {
-      const techStackArray = formData.tech_stack
-        .split(',')
-        .map(t => t.trim())
-        .filter(t => t.length > 0)
-
-      await updateApp(appId, {
-        name: formData.name,
-        version: formData.version,
-        icon_url: formData.icon_url || undefined,
-        short_description: formData.short_description || undefined,
-        os: formData.os,
-        status: formData.status,
-        deployment_status: formData.deployment_status,
-        tech_stack: techStackArray.length > 0 ? techStackArray : undefined,
-        repository_url: formData.repository_url || undefined,
-        testflight_url: formData.testflight_url || undefined,
-        play_console_url: formData.play_console_url || undefined,
-        api_status_url: formData.api_status_url || undefined,
-      })
-
-      router.push(`/apps/${appId}`)
+      // TODO: Re-enable when edit page is migrated to new schema
+      // await updateApp(appId, {
+      //   name: formData.name,
+      //   version: formData.version,
+      //   icon_url: formData.icon_url || undefined,
+      //   short_description: formData.short_description || undefined,
+      //   os: formData.os,
+      //   status: formData.status,
+      //   deployment_status: formData.deployment_status,
+      //   tech_stack: formData.tech_stack.split(',').map(t => t.trim()).filter(t => t.length > 0),
+      //   repository_url: formData.repository_url || undefined,
+      //   testflight_url: formData.testflight_url || undefined,
+      //   play_console_url: formData.play_console_url || undefined,
+      //   api_status_url: formData.api_status_url || undefined,
+      // })
+      
+      setError('Edit page not yet connected to Supabase.')
+      setSaving(false)
     } catch (err) {
-      setError('Failed to update application. Please try again.')
+      setError('Failed to update application')
       setSaving(false)
     }
   }

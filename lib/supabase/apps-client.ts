@@ -1,454 +1,366 @@
 import { createClient } from './client'
-import type { 
-  MobileApp, 
-  AppDocument, 
-  AppLog, 
-  AppKPI, 
-  CreateAppInput, 
-  UpdateAppInput,
-  OS,
-  AppStatus,
-  DeploymentStatus 
-} from '@/types/app'
+import type { DatabaseApp } from './types'
 
-// Helper pour générer un slug à partir du nom
-function generateSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
+export type { DatabaseApp }
+
+export interface CreateAppInput {
+  slug: string
+  name: string
+  description?: string
+  version?: string
+  icon_url?: string
+  os: 'iOS' | 'Android' | 'Cross-platform'
+  status: 'Active' | 'Maintenance' | 'Archived'
+  documentation_status: 'Complete' | 'Missing'
+  source_code_url?: string
+  test_url?: string
+}
+
+export interface CreateAppDocumentInput {
+  app_id: string
+  type: 'technical_spec' | 'design_spec'
+  title: string
+  url: string
+  storage_path?: string
+  status: 'Available' | 'Missing'
+}
+
+export interface AppWithDocuments extends DatabaseApp {
+  documents: Array<{
+    id: string
+    app_id: string
+    type: string
+    title: string
+    url: string
+    storage_path: string | null
+    status: string
+    created_at: string
+    updated_at: string
+  }>
+}
+
+export interface CreateAppBuildInput {
+  app_id: string
+  build_number: string
+  version: string
+  platform: 'iOS' | 'Android' | 'Cross-platform'
+  status: 'Success' | 'Failed' | 'Pending'
+  environment: 'Production' | 'Staging' | 'Internal'
+  duration: string
+  author: string
+}
+
+export interface AppWithBuilds extends DatabaseApp {
+  builds: Array<{
+    id: string
+    app_id: string
+    build_number: string
+    version: string
+    platform: string
+    status: string
+    environment: string
+    duration: string
+    author: string
+    created_at: string
+  }>
 }
 
 /**
- * Récupère toutes les applications de l'utilisateur connecté
+ * Fetches all applications from Supabase (browser client)
+ * Returns sorted by created_at descending
  */
-export async function getApps(filters?: {
-  search?: string
-  os?: OS | 'all'
-  status?: AppStatus | 'all'
-  deployment_status?: DeploymentStatus | 'all'
-}): Promise<MobileApp[]> {
+export async function getApps(): Promise<{ data: DatabaseApp[] | null; error: string | null }> {
   const supabase = createClient()
   
-  let query = supabase
-    .from('mobile_apps')
+  const { data, error } = await supabase
+    .from('apps')
     .select('*')
     .order('created_at', { ascending: false })
   
-  if (filters?.search) {
-    query = query.ilike('name', `%${filters.search}%`)
-  }
-  
-  if (filters?.os && filters.os !== 'all') {
-    query = query.eq('os', filters.os)
-  }
-  
-  if (filters?.status && filters.status !== 'all') {
-    query = query.eq('status', filters.status)
-  }
-  
-  if (filters?.deployment_status && filters.deployment_status !== 'all') {
-    query = query.eq('deployment_status', filters.deployment_status)
-  }
-  
-  const { data, error } = await query
-  
   if (error) {
     console.error('Error fetching apps:', error)
-    throw new Error('Failed to fetch applications')
+    return { data: null, error: error.message }
   }
   
-  return data || []
+  return { data, error: null }
 }
 
 /**
- * Récupère une application par son ID
+ * Fetches a single application by slug (browser client)
  */
-export async function getAppById(id: string): Promise<MobileApp | null> {
+export async function getAppBySlug(slug: string): Promise<{ data: DatabaseApp | null; error: string | null }> {
   const supabase = createClient()
   
   const { data, error } = await supabase
-    .from('mobile_apps')
+    .from('apps')
     .select('*')
-    .eq('id', id)
+    .eq('slug', slug)
     .single()
   
   if (error) {
-    console.error('Error fetching app:', error)
-    return null
+    // If error is "PGRST116" (not found), return null
+    if (error.code === 'PGRST116') {
+      return { data: null, error: null }
+    }
+    console.error('Error fetching app by slug:', error)
+    return { data: null, error: error.message }
   }
   
-  return data
+  return { data, error: null }
 }
 
 /**
- * Crée une nouvelle application
+ * Creates a new application in Supabase
+ * Uses the new 'apps' table schema
  */
-export async function createApp(input: CreateAppInput): Promise<MobileApp> {
+export async function createApp(input: CreateAppInput): Promise<{ data: DatabaseApp | null; error: string | null }> {
   const supabase = createClient()
   
-  // Récupérer l'utilisateur connecté
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    throw new Error('User not authenticated')
-  }
-  
-  const slug = generateSlug(input.name)
-  
   const { data, error } = await supabase
-    .from('mobile_apps')
+    .from('apps')
     .insert({
-      user_id: user.id,
+      slug: input.slug,
       name: input.name,
-      slug,
-      version: input.version,
+      description: input.description || null,
+      version: input.version || null,
       icon_url: input.icon_url || null,
-      short_description: input.short_description || null,
       os: input.os,
-      status: input.status || 'active',
-      deployment_status: input.deployment_status || 'green',
-      tech_stack: input.tech_stack || [],
-      repository_url: input.repository_url || null,
-      testflight_url: input.testflight_url || null,
-      play_console_url: input.play_console_url || null,
-      api_status_url: input.api_status_url || null,
+      status: input.status,
+      documentation_status: input.documentation_status,
+      source_code_url: input.source_code_url || null,
+      test_url: input.test_url || null,
     })
     .select()
     .single()
   
   if (error) {
     console.error('Error creating app:', error)
-    throw new Error('Failed to create application')
+    return { data: null, error: error.message }
   }
   
-  // Créer les KPIs initiaux
-  await createAppKPIs(data.id, user.id)
-  
-  // Créer un log
-  await createLog(data.id, user.id, 'created', `Application "${input.name}" created`)
-  
-  return data
+  return { data, error: null }
 }
 
 /**
- * Met à jour une application
+ * Checks if a slug already exists in the database
  */
-export async function updateApp(id: string, input: UpdateAppInput): Promise<MobileApp> {
+export async function checkSlugExists(slug: string): Promise<boolean> {
   const supabase = createClient()
   
-  // Récupérer l'utilisateur connecté
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data, error } = await supabase
+    .from('apps')
+    .select('slug')
+    .eq('slug', slug)
+    .single()
   
-  if (!user) {
-    throw new Error('User not authenticated')
+  if (error) {
+    // If error is "PGRST116" (not found), slug doesn't exist
+    if (error.code === 'PGRST116') {
+      return false
+    }
+    console.error('Error checking slug:', error)
+    return false
   }
   
-  const updateData: any = {}
-  
-  if (input.name !== undefined) updateData.name = input.name
-  if (input.version !== undefined) updateData.version = input.version
-  if (input.icon_url !== undefined) updateData.icon_url = input.icon_url
-  if (input.short_description !== undefined) updateData.short_description = input.short_description
-  if (input.os !== undefined) updateData.os = input.os
-  if (input.status !== undefined) updateData.status = input.status
-  if (input.deployment_status !== undefined) updateData.deployment_status = input.deployment_status
-  if (input.tech_stack !== undefined) updateData.tech_stack = input.tech_stack
-  if (input.repository_url !== undefined) updateData.repository_url = input.repository_url
-  if (input.testflight_url !== undefined) updateData.testflight_url = input.testflight_url
-  if (input.play_console_url !== undefined) updateData.play_console_url = input.play_console_url
-  if (input.api_status_url !== undefined) updateData.api_status_url = input.api_status_url
+  return !!data
+}
+
+/**
+ * Creates a new document for an application
+ */
+export async function createAppDocument(input: CreateAppDocumentInput): Promise<{ data: any | null; error: string | null }> {
+  const supabase = createClient()
   
   const { data, error } = await supabase
-    .from('mobile_apps')
-    .update(updateData)
-    .eq('id', id)
+    .from('app_documents')
+    .insert({
+      app_id: input.app_id,
+      type: input.type,
+      title: input.title,
+      url: input.url,
+      storage_path: input.storage_path || null,
+      status: input.status,
+    })
     .select()
     .single()
   
   if (error) {
-    console.error('Error updating app:', error)
-    throw new Error('Failed to update application')
+    console.error('Error creating app document:', error)
+    return { data: null, error: error.message }
   }
   
-  // Créer un log
-  await createLog(id, user.id, 'updated', `Application "${data.name}" updated`)
-  
-  return data
+  return { data, error: null }
 }
 
 /**
- * Supprime une application
+ * Fetches all applications with their documents
+ * Does two queries and groups documents by app_id on the client side
  */
-export async function deleteApp(id: string, appName: string): Promise<void> {
+export async function getAppsWithDocuments(): Promise<{ data: AppWithDocuments[] | null; error: string | null }> {
   const supabase = createClient()
   
-  // Récupérer l'utilisateur connecté
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    throw new Error('User not authenticated')
-  }
-  
-  // Créer un log avant suppression
-  await createLog(id, user.id, 'deleted', `Application "${appName}" deleted`)
-  
-  const { error } = await supabase
-    .from('mobile_apps')
-    .delete()
-    .eq('id', id)
-  
-  if (error) {
-    console.error('Error deleting app:', error)
-    throw new Error('Failed to delete application')
-  }
-}
-
-/**
- * Récupère les logs d'une application
- */
-export async function getAppLogs(appId: string): Promise<AppLog[]> {
-  const supabase = createClient()
-  
-  const { data, error } = await supabase
-    .from('app_logs')
+  // Fetch apps
+  const { data: apps, error: appsError } = await supabase
+    .from('apps')
     .select('*')
-    .eq('app_id', appId)
     .order('created_at', { ascending: false })
   
-  if (error) {
-    console.error('Error fetching logs:', error)
-    return []
+  if (appsError) {
+    console.error('Error fetching apps:', appsError)
+    return { data: null, error: appsError.message }
   }
   
-  return data || []
-}
-
-/**
- * Récupère les KPIs d'une application
- */
-export async function getAppKPIs(appId: string): Promise<AppKPI | null> {
-  const supabase = createClient()
+  if (!apps || apps.length === 0) {
+    return { data: [], error: null }
+  }
   
-  const { data, error } = await supabase
-    .from('app_kpis')
+  // Fetch all documents
+  const { data: documents, error: docsError } = await supabase
+    .from('app_documents')
     .select('*')
-    .eq('app_id', appId)
-    .single()
   
-  if (error) {
-    console.error('Error fetching KPIs:', error)
-    return null
+  if (docsError) {
+    console.error('Error fetching documents:', docsError)
+    return { data: null, error: docsError.message }
   }
   
-  return data
+  // Group documents by app_id
+  const docsByAppId = new Map<string, any[]>()
+  if (documents) {
+    documents.forEach((doc) => {
+      if (!docsByAppId.has(doc.app_id)) {
+        docsByAppId.set(doc.app_id, [])
+      }
+      docsByAppId.get(doc.app_id)!.push(doc)
+    })
+  }
+  
+  // Attach documents to apps
+  const appsWithDocuments: AppWithDocuments[] = apps.map((app) => ({
+    ...app,
+    documents: docsByAppId.get(app.id) || [],
+  }))
+  
+  return { data: appsWithDocuments, error: null }
 }
 
 /**
- * Met à jour les KPIs d'une application
+ * Fetches documents for a specific app by its ID
  */
-export async function updateAppKPIs(
-  appId: string, 
-  kpis: Partial<Omit<AppKPI, 'id' | 'app_id' | 'user_id' | 'created_at' | 'updated_at'>>
-): Promise<AppKPI> {
-  const supabase = createClient()
-  
-  const { data, error } = await supabase
-    .from('app_kpis')
-    .update(kpis)
-    .eq('app_id', appId)
-    .select()
-    .single()
-  
-  if (error) {
-    console.error('Error updating KPIs:', error)
-    throw new Error('Failed to update KPIs')
-  }
-  
-  return data
-}
-
-/**
- * Récupère les documents d'une application
- */
-export async function getAppDocuments(appId: string): Promise<AppDocument[]> {
+export async function getAppDocuments(appId: string): Promise<{ data: any[] | null; error: string | null }> {
   const supabase = createClient()
   
   const { data, error } = await supabase
     .from('app_documents')
     .select('*')
     .eq('app_id', appId)
+  
+  if (error) {
+    console.error('Error fetching app documents:', error)
+    return { data: null, error: error.message }
+  }
+  
+  return { data: data || [], error: null }
+}
+
+/**
+ * Creates a new build for an application
+ */
+export async function createAppBuild(input: CreateAppBuildInput): Promise<{ data: any | null; error: string | null }> {
+  const supabase = createClient()
+  
+  const { data, error } = await supabase
+    .from('app_builds')
+    .insert({
+      app_id: input.app_id,
+      build_number: input.build_number,
+      version: input.version,
+      platform: input.platform,
+      status: input.status,
+      environment: input.environment,
+      duration: input.duration,
+      author: input.author,
+    })
+    .select()
+    .single()
+  
+  if (error) {
+    console.error('Error creating app build:', error)
+    return { data: null, error: error.message }
+  }
+  
+  return { data, error: null }
+}
+
+/**
+ * Fetches all applications with their builds
+ * Does two queries and groups builds by app_id on the client side
+ */
+export async function getAppsWithBuilds(): Promise<{ data: AppWithBuilds[] | null; error: string | null }> {
+  const supabase = createClient()
+  
+  // Fetch apps
+  const { data: apps, error: appsError } = await supabase
+    .from('apps')
+    .select('*')
+    .order('created_at', { ascending: false })
+  
+  if (appsError) {
+    console.error('Error fetching apps:', appsError)
+    return { data: null, error: appsError.message }
+  }
+  
+  if (!apps || apps.length === 0) {
+    return { data: [], error: null }
+  }
+  
+  // Fetch all builds
+  const { data: builds, error: buildsError } = await supabase
+    .from('app_builds')
+    .select('*')
+    .order('created_at', { ascending: false })
+  
+  if (buildsError) {
+    console.error('Error fetching builds:', buildsError)
+    return { data: null, error: buildsError.message }
+  }
+  
+  // Group builds by app_id
+  const buildsByAppId = new Map<string, any[]>()
+  if (builds) {
+    builds.forEach((build) => {
+      if (!buildsByAppId.has(build.app_id)) {
+        buildsByAppId.set(build.app_id, [])
+      }
+      buildsByAppId.get(build.app_id)!.push(build)
+    })
+  }
+  
+  // Attach builds to apps
+  const appsWithBuilds: AppWithBuilds[] = apps.map((app) => ({
+    ...app,
+    builds: buildsByAppId.get(app.id) || [],
+  }))
+  
+  return { data: appsWithBuilds, error: null }
+}
+
+/**
+ * Fetches builds for a specific app by its ID
+ */
+export async function getAppBuilds(appId: string): Promise<{ data: any[] | null; error: string | null }> {
+  const supabase = createClient()
+  
+  const { data, error } = await supabase
+    .from('app_builds')
+    .select('*')
+    .eq('app_id', appId)
     .order('created_at', { ascending: false })
   
   if (error) {
-    console.error('Error fetching documents:', error)
-    return []
+    console.error('Error fetching app builds:', error)
+    return { data: null, error: error.message }
   }
   
-  return data || []
-}
-
-/**
- * Crée ou met à jour un document d'application
- */
-export async function createOrUpdateAppDocument(
-  appId: string,
-  input: {
-    type: DocumentType
-    title: string
-    external_url?: string
-    file_url?: string
-    mime_type?: string
-  }
-): Promise<AppDocument> {
-  const supabase = createClient()
-  
-  // Récupérer l'utilisateur connecté
-  const { data: { user } } = await supabase.auth.getUser()
-  
-  if (!user) {
-    throw new Error('User not authenticated')
-  }
-
-  if (!input.title || !input.type) {
-    throw new Error('Title and type are required')
-  }
-
-  if (!input.external_url && !input.file_url) {
-    throw new Error('At least external_url or file_url is required')
-  }
-
-  // Vérifier si un document du même type existe déjà
-  const { data: existingDoc } = await supabase
-    .from('app_documents')
-    .select('*')
-    .eq('app_id', appId)
-    .eq('type', input.type)
-    .single()
-
-  let result
-
-  if (existingDoc) {
-    // Mettre à jour le document existant
-    const { data, error } = await supabase
-      .from('app_documents')
-      .update({
-        title: input.title,
-        external_url: input.external_url || null,
-        file_url: input.file_url || null,
-        mime_type: input.mime_type || null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', existingDoc.id)
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error updating document:', error)
-      throw new Error('Failed to update document')
-    }
-
-    result = data
-
-    // Créer un log
-    await createLog(appId, user.id, 'document_updated', `Document "${input.title}" updated`)
-  } else {
-    // Créer un nouveau document
-    const { data, error } = await supabase
-      .from('app_documents')
-      .insert({
-        app_id: appId,
-        user_id: user.id,
-        type: input.type,
-        title: input.title,
-        external_url: input.external_url || null,
-        file_url: input.file_url || null,
-        mime_type: input.mime_type || null,
-      })
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error creating document:', error)
-      throw new Error('Failed to create document')
-    }
-
-    result = data
-
-    // Créer un log
-    await createLog(appId, user.id, 'document_added', `Document "${input.title}" added`)
-  }
-
-  return result
-}
-
-/**
- * Calcule le taux de complétude de la documentation
- */
-export function getDocumentationCompleteness(documents: AppDocument[]): number {
-  const hasTechnicalSpec = documents.some(d => d.type === 'technical_spec')
-  const hasGraphicSpec = documents.some(d => d.type === 'graphic_spec')
-
-  if (!hasTechnicalSpec && !hasGraphicSpec) return 0
-  if (hasTechnicalSpec && hasGraphicSpec) return 100
-  return 50
-}
-
-/**
- * Récupère le document principal d'un type donné
- */
-export function getPrimaryDocument(documents: AppDocument[], type: DocumentType): AppDocument | null {
-  return documents.find(d => d.type === type as any) || null
-}
-
-/**
- * Récupère tous les documents screenshots
- */
-export function getScreenshotDocuments(documents: AppDocument[]): AppDocument[] {
-  return documents.filter(d => d.type === 'screenshot')
-}
-
-// ============================================================================
-// HELPER FUNCTIONS (internes)
-// ============================================================================
-
-/**
- * Crée les KPIs initiaux pour une application
- */
-async function createAppKPIs(appId: string, userId: string): Promise<void> {
-  const supabase = createClient()
-  
-  const { error } = await supabase
-    .from('app_kpis')
-    .insert({
-      app_id: appId,
-      user_id: userId,
-      downloads: 0,
-      crashes: 0,
-      active_users: 0,
-    })
-  
-  if (error) {
-    console.error('Error creating KPIs:', error)
-  }
-}
-
-/**
- * Crée un log
- */
-async function createLog(appId: string, userId: string, action: string, details?: string): Promise<void> {
-  const supabase = createClient()
-  
-  const { error } = await supabase
-    .from('app_logs')
-    .insert({
-      app_id: appId,
-      user_id: userId,
-      action,
-      details,
-    })
-  
-  if (error) {
-    console.error('Error creating log:', error)
-  }
+  return { data: data || [], error: null }
 }
