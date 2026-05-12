@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { KPIWidget } from '@/components/ui/KPIWidget'
 import { Rocket, Plus, Search, X, Smartphone, Clock, User, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
-import { getAppsWithBuilds, createAppBuild, getApps, type AppWithBuilds, type CreateAppBuildInput, type DatabaseApp } from '@/lib/supabase/apps-client'
+import { getAppsWithBuilds, createAppBuild, createAppLog, type AppWithBuilds, type CreateAppBuildInput, type DatabaseApp } from '@/lib/supabase/apps-client'
 
 type BuildStatus = 'Success' | 'Failed' | 'Pending'
 type BuildEnvironment = 'Production' | 'Staging' | 'Internal'
@@ -29,6 +29,7 @@ export default function BuildsPage() {
   const [registerLoading, setRegisterLoading] = useState(false)
   const [registerError, setRegisterError] = useState('')
   const [registerSuccess, setRegisterSuccess] = useState(false)
+  const [registerWarning, setRegisterWarning] = useState('')
   const [registerForm, setRegisterForm] = useState({
     app_id: '',
     build_number: '',
@@ -192,6 +193,7 @@ export default function BuildsPage() {
   const handleRegisterBuild = async (e: React.FormEvent) => {
     e.preventDefault()
     setRegisterError('')
+    setRegisterWarning('')
     setRegisterLoading(true)
 
     if (!registerForm.app_id || !registerForm.build_number || !registerForm.version || !registerForm.duration || !registerForm.author) {
@@ -219,6 +221,17 @@ export default function BuildsPage() {
       return
     }
 
+    const logAuthor = registerForm.author.trim() || 'Current user'
+    const { error: logError } = await createAppLog({
+      app_id: registerForm.app_id,
+      action: 'Build registered',
+      author: logAuthor,
+      description: `Build ${registerForm.build_number} registered for version ${registerForm.version}.`,
+    })
+    if (logError) {
+      setRegisterWarning('Activity log could not be saved; the build was still registered.')
+    }
+
     setRegisterSuccess(true)
     setRegisterLoading(false)
     
@@ -231,6 +244,7 @@ export default function BuildsPage() {
     // Reset form and close after delay
     setTimeout(() => {
       setRegisterSuccess(false)
+      setRegisterWarning('')
       setShowRegisterForm(false)
       setRegisterForm({
         app_id: '',
@@ -488,10 +502,15 @@ export default function BuildsPage() {
                 </div>
 
                 {registerSuccess ? (
-                  <div className="text-center py-8">
-                    <CheckCircle size={48} className="text-[#00CC88] mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-white mb-2">Build Registered!</h3>
+                  <div className="text-center py-8 space-y-4">
+                    <CheckCircle size={48} className="text-[#00CC88] mx-auto" />
+                    <h3 className="text-lg font-semibold text-white">Build Registered!</h3>
                     <p className="text-[#888888]">The build has been successfully registered.</p>
+                    {registerWarning && (
+                      <div className="text-left text-sm text-[#FFA500] bg-[#FFA500]/10 border border-[#FFA500]/20 rounded-lg p-3">
+                        {registerWarning}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <form onSubmit={handleRegisterBuild} className="space-y-4">

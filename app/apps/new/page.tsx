@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/Textarea'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Smartphone, ArrowLeft, Check } from 'lucide-react'
-import { createApp, checkSlugExists, createAppDocument, type CreateAppInput } from '@/lib/supabase/apps-client'
+import { createApp, checkSlugExists, createAppDocument, createAppLog, type CreateAppInput } from '@/lib/supabase/apps-client'
 
 export default function NewAppPage() {
   const router = useRouter()
@@ -102,6 +102,16 @@ export default function NewAppPage() {
     const warnings: string[] = []
     
     if (data && data.id) {
+      const { error: logError } = await createAppLog({
+        app_id: data.id,
+        action: 'Application created',
+        author: 'Current user',
+        description: 'Application created from CoreHub Focus.',
+      })
+      if (logError) {
+        warnings.push('Activity log could not be saved; the application was still created.')
+      }
+
       if (formData.technical_spec_url) {
         const { error: docError } = await createAppDocument({
           app_id: data.id,

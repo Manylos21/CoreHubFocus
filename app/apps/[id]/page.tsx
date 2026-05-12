@@ -1,14 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/ui/Sidebar'
 import { Topbar } from '@/components/ui/Topbar'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { getAppBySlug, getAppDocuments, getAppBuilds } from '@/lib/supabase/apps-client'
-import type { DatabaseApp } from '@/lib/supabase/types'
+import { Input } from '@/components/ui/Input'
+import { getAppBySlug, getAppDocuments, getAppBuilds, getAppLogs, deleteApp } from '@/lib/supabase/apps-client'
+import type { DatabaseApp, DatabaseAppLog } from '@/lib/supabase/types'
 import Link from 'next/link'
 import { 
   Smartphone, 
@@ -20,18 +21,46 @@ import {
   Trash2,
   Code,
   Globe,
-  Rocket
+  Rocket,
+  CircleDot,
 } from 'lucide-react'
 
 export default function AppDetailPage() {
   const params = useParams()
+  const router = useRouter()
   const id = params.id as string
   
   const [app, setApp] = useState<DatabaseApp | null>(null)
   const [documents, setDocuments] = useState<any[]>([])
   const [builds, setBuilds] = useState<any[]>([])
+  const [activityLogs, setActivityLogs] = useState<DatabaseAppLog[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [confirmAppName, setConfirmAppName] = useState('')
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const closeDeleteModal = () => {
+    setShowDeleteModal(false)
+    setConfirmAppName('')
+    setDeleteError(null)
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!app || confirmAppName !== app.name) return
+    setDeleteError(null)
+    setIsDeleting(true)
+    const { error: delError } = await deleteApp(app.id)
+    setIsDeleting(false)
+    if (delError) {
+      setDeleteError(delError)
+      return
+    }
+    closeDeleteModal()
+    router.push('/apps')
+  }
 
   useEffect(() => {
     const fetchApp = async () => {
@@ -53,6 +82,12 @@ export default function AppDetailPage() {
         const { data: buildsData, error: buildsError } = await getAppBuilds(data.id)
         if (buildsData && !buildsError) {
           setBuilds(buildsData)
+        }
+        const { data: logsData, error: logsError } = await getAppLogs(data.id)
+        if (logsData && !logsError) {
+          setActivityLogs(logsData.slice(0, 5))
+        } else {
+          setActivityLogs([])
         }
       }
       
@@ -161,6 +196,17 @@ export default function AppDetailPage() {
     })
   }
 
+  const formatLogTimestamp = (dateString: string | null) => {
+    if (!dateString) return 'N/A'
+    return new Date(dateString).toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
   const getDocumentByType = (type: string) => {
     return documents.find((doc) => doc.type === type)
   }
@@ -229,7 +275,16 @@ export default function AppDetailPage() {
                     Edit
                   </Button>
                 </Link>
-                <Button variant="danger" size="sm">
+                <Button
+                  variant="danger"
+                  size="sm"
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteModal(true)
+                    setConfirmAppName('')
+                    setDeleteError(null)
+                  }}
+                >
                   <Trash2 size={16} className="mr-2" />
                   Delete
                 </Button>
@@ -423,13 +478,53 @@ export default function AppDetailPage() {
           </Card>
 
           {/* Activity Logs */}
-          <Card>
+          <div className="mb-6 rounded-xl border border-[#333333] bg-[#111111] p-5">
             <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <Clock size={18} />
+              <Clock size={18} className="text-[#888888]" />
               Activity Logs
+              {activityLogs.length > 0 && (
+                <span className="ml-auto text-xs font-normal text-[#666666]">Last 5 events</span>
+              )}
             </h2>
-            <p className="text-[#888888]">No logs yet</p>
-          </Card>
+            {activityLogs.length === 0 ? (
+              <p className="text-sm text-[#888888]">No activity logs yet</p>
+            ) : (
+              <div className="relative pl-1">
+                <div
+                  className="absolute left-[11px] top-2 bottom-2 w-px bg-[#333333]"
+                  aria-hidden
+                />
+                <div className="space-y-3">
+                  {activityLogs.map((log) => (
+                    <div key={log.id} className="relative pl-8">
+                      <span className="absolute left-0 top-2 flex h-6 w-6 items-center justify-center">
+                        <CircleDot
+                          size={14}
+                          className="text-[#0070F3] drop-shadow-[0_0_6px_rgba(0,112,243,0.35)]"
+                          aria-hidden
+                        />
+                      </span>
+                      <div className="rounded-lg border border-[#333333] bg-[#0a0a0a] px-3 py-2.5 transition-colors hover:border-[#404040] hover:bg-[#141414]">
+                        <div className="flex flex-wrap items-baseline justify-between gap-2 gap-y-1">
+                          <span className="text-sm font-medium text-white">{log.action}</span>
+                          <time className="text-xs tabular-nums text-[#666666]">
+                            {formatLogTimestamp(log.created_at)}
+                          </time>
+                        </div>
+                        {log.description && (
+                          <p className="mt-1 text-xs leading-relaxed text-[#aaaaaa]">{log.description}</p>
+                        )}
+                        <p className="mt-1.5 text-xs text-[#666666]">
+                          <span className="text-[#555555]">By</span>{' '}
+                          {log.author || 'Unknown'}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Footer Info */}
           <div className="mt-6 flex items-center gap-4 text-xs text-[#666666]">
@@ -439,6 +534,70 @@ export default function AppDetailPage() {
           </div>
         </main>
       </div>
+
+      {showDeleteModal && app && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-app-title"
+            className="w-full max-w-md rounded-lg border border-red-500/30 bg-[#111111] p-6 shadow-xl"
+          >
+            <h2 id="delete-app-title" className="text-lg font-bold text-[#FF0000]">
+              Delete Application
+            </h2>
+            <p className="mt-3 text-sm text-[#cccccc] leading-relaxed">
+              This action is permanent and cannot be undone. The application will be removed from
+              CoreHub Focus, including its listing in the hub.
+            </p>
+            <p className="mt-4 text-sm font-medium text-white">
+              Type the application name exactly to confirm:
+            </p>
+            <p className="mt-1 rounded border border-[#333333] bg-[#0a0a0a] px-3 py-2 font-mono text-sm text-[#888888]">
+              {app.name}
+            </p>
+            <div className="mt-4">
+              <Input
+                label="Confirmation"
+                placeholder="Enter the application name"
+                value={confirmAppName}
+                onChange={(e) => setConfirmAppName(e.target.value)}
+                autoComplete="off"
+                disabled={isDeleting}
+                className="border-[#333333] bg-[#111111] text-white"
+              />
+            </div>
+            {deleteError && (
+              <div className="mt-4 rounded-lg border border-[#FF0000]/30 bg-[#FF0000]/10 p-3 text-sm text-[#FF6666]">
+                {deleteError}
+              </div>
+            )}
+            {isDeleting && (
+              <p className="mt-3 text-xs text-[#888888]">Deleting application…</p>
+            )}
+            <div className="mt-6 flex justify-end gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={isDeleting}
+                onClick={closeDeleteModal}
+                className="border-[#333333] bg-[#111111] text-white"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                disabled={isDeleting || confirmAppName !== app.name}
+                onClick={handleConfirmDelete}
+                className="bg-[#FF0000] hover:bg-[#cc0000] text-white"
+              >
+                {isDeleting ? 'Deleting…' : 'Confirm Delete'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { createClient } from './client'
-import type { DatabaseApp } from './types'
+import type { DatabaseApp, DatabaseAppLog } from './types'
 
 export type { DatabaseApp }
 
@@ -363,4 +363,121 @@ export async function getAppBuilds(appId: string): Promise<{ data: any[] | null;
   }
   
   return { data: data || [], error: null }
+}
+
+export interface CreateAppLogInput {
+  app_id: string
+  action: string
+  author?: string
+  description?: string
+}
+
+/**
+ * Creates a new activity log for an application
+ */
+export async function createAppLog(
+  input: CreateAppLogInput
+): Promise<{ data: DatabaseAppLog | null; error: string | null }> {
+  const supabase = createClient()
+
+  const { data, error } = await supabase
+    .from('app_logs')
+    .insert({
+      app_id: input.app_id,
+      action: input.action,
+      author: input.author || 'Current user',
+      description: input.description || null,
+    })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error creating app log:', error)
+    return { data: null, error: error.message }
+  }
+
+  return { data, error: null }
+}
+
+/**
+ * Fetches activity logs for a specific app by its ID
+ */
+export async function getAppLogs(
+  appId: string
+): Promise<{ data: DatabaseAppLog[] | null; error: string | null }> {
+  const supabase = createClient()
+
+  const { data, error } = await supabase
+    .from('app_logs')
+    .select('*')
+    .eq('app_id', appId)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching app logs:', error)
+    return { data: null, error: error.message }
+  }
+
+  return { data: data || [], error: null }
+}
+
+export interface UpdateAppInput {
+  name?: string
+  description?: string
+  version?: string
+  icon_url?: string
+  os?: string
+  status?: string
+  source_code_url?: string
+  test_url?: string
+}
+
+/**
+ * Updates an application row by primary key (browser client).
+ * Empty strings for nullable URL/description fields are sent as null.
+ */
+export async function updateApp(
+  id: string,
+  input: UpdateAppInput
+): Promise<{ data: DatabaseApp | null; error: string | null }> {
+  const supabase = createClient()
+
+  const nullableKeys = new Set(['description', 'icon_url', 'source_code_url', 'test_url'])
+  const payload: Record<string, string | null> = {}
+
+  for (const [key, value] of Object.entries(input) as [keyof UpdateAppInput, string | undefined][]) {
+    if (value === undefined) continue
+    if (typeof value !== 'string') continue
+    if (nullableKeys.has(key)) {
+      const t = value.trim()
+      payload[key] = t === '' ? null : t
+    } else {
+      payload[key] = value
+    }
+  }
+
+  const { data, error } = await supabase.from('apps').update(payload).eq('id', id).select().single()
+
+  if (error) {
+    console.error('Error updating app:', error)
+    return { data: null, error: error.message }
+  }
+
+  return { data, error: null }
+}
+
+/**
+ * Deletes an application by primary key (browser client).
+ */
+export async function deleteApp(id: string): Promise<{ data: unknown; error: string | null }> {
+  const supabase = createClient()
+
+  const { data, error } = await supabase.from('apps').delete().eq('id', id)
+
+  if (error) {
+    console.error('Error deleting app:', error)
+    return { data: null, error: error.message }
+  }
+
+  return { data: data ?? null, error: null }
 }
